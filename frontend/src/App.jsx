@@ -79,6 +79,12 @@ function App() {
     setExpandedId(expandedId === bookmark.id ? null : bookmark.id);
   };
 
+  const handleTitleClick = (e, url) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const handleUpload = async () => {
     if (!file) return;
     setStatus('uploading');
@@ -196,10 +202,8 @@ function App() {
                   <div className="card-header">
                     <a
                       href={bookmark.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="card-title"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => handleTitleClick(e, bookmark.url)}
                     >
                       {bookmark.title || 'Untitled'}
                     </a>
