@@ -1,0 +1,74 @@
+import argparse
+import os
+from dotenv import load_dotenv
+
+from bookmark_parser import parse_safari_bookmarks
+from content_fetcher import fetch_and_extract_content
+from llm_processor import process_content_with_llm
+from storage import init_supabase, store_bookmark
+
+def main():
+    parser = argparse.ArgumentParser(description="Process Safari Bookmarks, summarize and categorize using local LLM, and store in Supabase.")
+    parser.add_argument("file_path", help="Path to the Safari Bookmarks HTML file.")
+    parser.add_argument("--model", default="gemma3", help="Name of the Ollama model to use (default: gemma3)")
+    parser.add_argument("--host", default="http://localhost:11434", help="Ollama host URL (default: http://localhost:11434)")
+    parser.add_argument("--dry-run", action="store_true", help="Print results instead of saving to database.")
+    
+    args = parser.parse_args()
+    
+    # Load environment variables (Supabase credentials)
+    load_dotenv()
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    
+    supabase_client = None
+    if not args.dry_run:
+        supabase_client = init_supabase(supabase_url, supabase_key)
+        if not supabase_client:
+            print("Failed to initialize Supabase client. Running in dry-run mode.")
+            args.dry_run = True
+
+    print(f"Parsing bookmarks from {args.file_path}...")
+    
+    success_count = 0
+    error_count = 0
+
+    for url, title in parse_safari_bookmarks(args.file_path):
+        print(f"\nProcessing: {title} ({url})")
+        
+        # 1. Fetch content
+        print("  - Fetching content...")
+        text_content = fetch_and_extract_content(url)
+        
+        if not text_content:
+            print("  - Failed to extract meaningful text content. Skipping.")
+            error_count += 1
+            continue
+            
+        # 2. Process with LLM
+        print(f"  - Summarizing with model '{args.model}'...")
+        llm_result = process_content_with_llm(text_content, model_name=args.model, ollama_host=args.host)
+        
+        summary = llm_result.get("summary", "")
+        category = llm_result.get("category", "")
+        
+        print(f"  - Category: {category}")
+        print(f"  - Summary: {summary}")
+        
+        # 3. Store in Database
+        if args.dry_run:
+            print("  - Dry run enabled: Skipping database insert.")
+            success_count += 1
+        else:
+            print("  - Saving to Database...")
+            if store_bookmark(supabase_client, title, url, summary, category):
+                print("  - Saved successfully.")
+                success_count += 1
+            else:
+                print("  - Error saving to database.")
+                error_count += 1
+                
+    print(f"\nDone! Processed {success_count} bookmarks successfully. {error_count} failed.")
+
+if __name__ == "__main__":
+    main()
