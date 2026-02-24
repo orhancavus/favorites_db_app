@@ -15,6 +15,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isLoading, setIsLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
 
   const ws = useRef(null);
 
@@ -68,6 +69,14 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCardClick = (e, bookmark) => {
+    // If clicking a link directly, don't trigger the card expansion
+    if (e.target.tagName === 'A') return;
+
+    // Toggle expansion
+    setExpandedId(expandedId === bookmark.id ? null : bookmark.id);
   };
 
   const handleUpload = async () => {
@@ -179,14 +188,26 @@ function App() {
           ) : (
             <div className="bookmark-grid">
               {filteredBookmarks.length > 0 ? filteredBookmarks.map(bookmark => (
-                <div key={bookmark.id} className="bookmark-card">
+                <div
+                  key={bookmark.id}
+                  className="bookmark-card"
+                  onClick={(e) => handleCardClick(e, bookmark)}
+                >
                   <div className="card-header">
-                    <a href={bookmark.url} target="_blank" rel="noopener noreferrer" className="card-title">
+                    <a
+                      href={bookmark.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="card-title"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {bookmark.title || 'Untitled'}
                     </a>
                     <span className="card-category">{bookmark.category}</span>
                   </div>
-                  <p className="card-summary">{bookmark.summary}</p>
+                  <p className={`card-summary ${expandedId === bookmark.id ? 'expanded' : ''}`}>
+                    {bookmark.summary}
+                  </p>
                   <div className="card-footer">
                     <span>{new URL(bookmark.url).hostname}</span>
                     <span>{new Date(bookmark.created_at).toLocaleDateString()}</span>

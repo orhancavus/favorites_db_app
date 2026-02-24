@@ -161,6 +161,7 @@ p.subtitle {
   flex-direction: column;
   gap: 0.75rem;
   transition: transform 0.2s, background 0.2s;
+  cursor: pointer;
 }
 
 .bookmark-card:hover {
@@ -208,6 +209,13 @@ p.subtitle {
   line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.card-summary.expanded {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  display: block;
 }
 
 .card-footer {
