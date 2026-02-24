@@ -144,6 +144,42 @@ async def websocket_endpoint(websocket: WebSocket):
 async def get_status(task_id: str):
     return tasks_progress.get(task_id, {"status": "not_found"})
 
+@app.get("/bookmarks")
+async def get_bookmarks(q: str = None):
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase_client = init_supabase(supabase_url, supabase_key)
+    
+    if not supabase_client:
+        return {"error": "Supabase not initialized"}
+        
+    query = supabase_client.table("bookmarks").select("*")
+    if q:
+        # Simple text search on title, summary, or category
+        query = query.or_(f"title.ilike.%{q}%,summary.ilike.%{q}%,category.ilike.%{q}%")
+    
+    response = query.order("created_at", desc=True).execute()
+    return response.data
+
+@app.get("/categories")
+async def get_categories():
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase_client = init_supabase(supabase_url, supabase_key)
+    
+    if not supabase_client:
+        return {"error": "Supabase not initialized"}
+        
+    # Get all categories to count them manually (Supabase aggregation is sometimes limited)
+    response = supabase_client.table("bookmarks").select("category").execute()
+    
+    categories = {}
+    for item in response.data:
+        cat = item.get("category") or "Uncategorized"
+        categories[cat] = categories.get(cat, 0) + 1
+        
+    return [{"name": name, "count": count} for name, count in categories.items()]
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
