@@ -1,5 +1,6 @@
 import ollama
 import json
+from security import validate_llm_input
 
 def process_content_with_llm(text, model_name="llama3", ollama_host="http://localhost:11434"):
     """
@@ -10,6 +11,17 @@ def process_content_with_llm(text, model_name="llama3", ollama_host="http://loca
     if not text:
         return {"summary": "No text content found to summarize.", "category": "Uncategorized"}
 
+    # Security Layer: Sanitize and validate input
+    validation = validate_llm_input(text)
+    if validation["is_risk"]:
+        return {
+            "summary": "Summarization blocked for security reasons (potentially malicious content).",
+            "category": "Security Blocked"
+        }
+    
+    # Use sanitized text for the prompt
+    clean_text = validation["safe_text"]
+
     prompt = f"""
 You are an expert content analyzer. I will provide you with the text content of a webpage.
 Your task is to analyze it and provide a JSON response with exactly two keys:
@@ -19,7 +31,7 @@ Your task is to analyze it and provide a JSON response with exactly two keys:
 The response MUST be valid JSON only, without any markdown formatting or extra text.
 
 Webpage Text:
-{text[:4000]} # Limit text length to avoid token limits for standard models
+{clean_text[:4000]} # Limit text length to avoid token limits for standard models
 
 JSON Response format:
 {{

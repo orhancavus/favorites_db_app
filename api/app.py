@@ -181,5 +181,10 @@ async def get_categories():
     return [{"name": name, "count": count} for name, count in categories.items()]
 
 if __name__ == "__main__":
+    print(" - run api: python api/app.py")
+    print(" - run frontend: npm run dev")
+    print(" - run security layer active: python security.py")
+
+    print("Visit **http://localhost:5173** to start.") 
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,15 +1,16 @@
 from bs4 import BeautifulSoup
 
-def parse_safari_bookmarks(file_path):
+def parse_bookmarks_html(file_path):
     """
-    Parses a Safari bookmarks HTML file and yields tuples of (url, title).
+    Parses a browser bookmarks HTML file (Safari, Edge, Chrome, etc.)
+    and yields tuples of (url, title).
     """
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             soup = BeautifulSoup(f, 'html.parser')
         
-        # Safari bookmarks export uses <DT><A HREF="url">Title</A> format usually
-        # But grabbing all 'a' tags with an 'href' is the most robust way
+        # Most browser bookmark exports use <DT><A HREF="url">Title</A> format
+        # Grabbing all 'a' tags with an 'href' is the most robust way across browsers
         links = soup.find_all('a')
         
         for link in links:

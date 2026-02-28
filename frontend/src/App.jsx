@@ -139,7 +139,18 @@ function App() {
               <input type="text" value={host} onChange={(e) => setHost(e.target.value)} />
             </div>
           </div>
-          <div className="drop-zone" onClick={() => document.getElementById('fileInput').click()}>
+          <div
+            className="drop-zone"
+            onClick={() => document.getElementById('fileInput').click()}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                setFile(e.dataTransfer.files[0]);
+              }
+            }}
+          >
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
             <p>{file ? file.name : "Select bookmarks.html"}</p>
             <input id="fileInput" type="file" style={{ display: 'none' }} onChange={(e) => setFile(e.target.files[0])} accept=".html" />
