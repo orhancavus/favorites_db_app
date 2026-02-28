@@ -18,10 +18,10 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 # Import existing logic
-from bookmark_parser import parse_safari_bookmarks
+from bookmark_parser import parse_bookmarks_html
 from content_fetcher import fetch_and_extract_content
 from llm_processor import process_content_with_llm
-from storage import init_supabase, store_bookmark
+from storage import init_supabase, store_bookmark, check_url_exists
 
 load_dotenv()
 
@@ -75,7 +75,7 @@ async def process_bookmarks_task(task_id: str, file_path: str, model: str, host:
         return
 
     # 2. Parse bookmarks
-    bookmarks = list(parse_safari_bookmarks(file_path))
+    bookmarks = list(parse_bookmarks_html(file_path))
     tasks_progress[task_id]["total"] = len(bookmarks)
     
     await manager.broadcast(json.dumps({"task_id": task_id, "type": "start", "total": len(bookmarks)}))
@@ -91,6 +91,10 @@ async def process_bookmarks_task(task_id: str, file_path: str, model: str, host:
             "total": tasks_progress[task_id]["total"],
             "current": title
         }))
+
+        # Skip if already exists
+        if check_url_exists(supabase_client, url):
+            continue
 
         # Fetch and process
         text_content = fetch_and_extract_content(url)

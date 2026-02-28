@@ -152,7 +152,7 @@ function App() {
             }}
           >
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-            <p>{file ? file.name : "Select bookmarks.html"}</p>
+            <p>{file ? file.name : "Select bookmarks.html (Safari, Edge, Chrome)"}</p>
             <input id="fileInput" type="file" style={{ display: 'none' }} onChange={(e) => setFile(e.target.files[0])} accept=".html" />
           </div>
           <button className="upload-button" onClick={handleUpload} disabled={!file || status === 'processing'}>

@@ -2,14 +2,14 @@ import argparse
 import os
 from dotenv import load_dotenv
 
-from bookmark_parser import parse_safari_bookmarks
+from bookmark_parser import parse_bookmarks_html
 from content_fetcher import fetch_and_extract_content
 from llm_processor import process_content_with_llm
-from storage import init_supabase, store_bookmark
+from storage import init_supabase, store_bookmark, check_url_exists
 
 def main():
-    parser = argparse.ArgumentParser(description="Process Safari Bookmarks, summarize and categorize using local LLM, and store in Supabase.")
-    parser.add_argument("file_path", help="Path to the Safari Bookmarks HTML file.")
+    parser = argparse.ArgumentParser(description="Process Browser Bookmarks (Safari, Edge, Chrome), summarize and categorize using local LLM, and store in Supabase.")
+    parser.add_argument("file_path", help="Path to the Bookmarks HTML file.")
     parser.add_argument("--model", default="gemma3", help="Name of the Ollama model to use (default: gemma3)")
     parser.add_argument("--host", default="http://localhost:11434", help="Ollama host URL (default: http://localhost:11434)")
     parser.add_argument("--dry-run", action="store_true", help="Print results instead of saving to database.")
@@ -33,9 +33,15 @@ def main():
     success_count = 0
     error_count = 0
 
-    for url, title in parse_safari_bookmarks(args.file_path):
+    for url, title in parse_bookmarks_html(args.file_path):
         print(f"\nProcessing: {title} ({url})")
         
+        # Check if already exists
+        if not args.dry_run and check_url_exists(supabase_client, url):
+            print(f"  - Skipping: URL already in database.")
+            success_count += 1
+            continue
+            
         # 1. Fetch content
         print("  - Fetching content...")
         text_content = fetch_and_extract_content(url)

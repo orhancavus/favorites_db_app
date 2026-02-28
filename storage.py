@@ -12,6 +12,19 @@ def init_supabase(url, key):
         print(f"Error initializing Supabase client: {e}")
         return None
 
+def check_url_exists(supabase: Client, url):
+    """
+    Checks if a URL already exists in the bookmarks table.
+    """
+    if not supabase:
+        return False
+    try:
+        response = supabase.table('bookmarks').select('url').eq('url', url).execute()
+        return len(response.data) > 0
+    except Exception as e:
+        print(f"Error checking if URL exists: {e}")
+        return False
+
 def store_bookmark(supabase: Client, title, url, summary, category):
     """
     Upserts the bookmark data into the Supabase database.
