@@ -1,12 +1,31 @@
 import ollama
 import json
+import google.generativeai as genai
 from security import validate_llm_input
 
-def process_content_with_llm(text, model_name="llama3", ollama_host="http://localhost:11434"):
+def process_with_ollama(prompt, model_name, host):
+    """Internal helper for Ollama processing."""
+    client = ollama.Client(host=host)
+    response = client.chat(
+        model=model_name,
+        messages=[{'role': 'user', 'content': prompt}],
+        format='json'
+    )
+    return response['message']['content']
+
+def process_with_gemini(prompt, api_key):
+    """Internal helper for Gemini processing."""
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash') # Using flash for speed and cost-effectiveness
+    
+    # Gemini might need a nudge to return clean JSON
+    response = model.generate_content(prompt + "\nIMPORTANT: Return ONLY valid JSON.")
+    return response.text
+
+def process_content_with_llm(text, provider="ollama", model_name="llama3", ollama_host="http://localhost:11434", gemini_api_key=None):
     """
-    Sends the extracted text to a local Ollama instance and asks it to 
-    summarize and categorize the content. Returns a dictionary with 
-    'summary' and 'category'.
+    Analyzes content using the specified LLM provider (ollama or gemini).
+    Returns a dictionary with 'summary' and 'category'.
     """
     if not text:
         return {"summary": "No text content found to summarize.", "category": "Uncategorized"}
@@ -31,7 +50,7 @@ Your task is to analyze it and provide a JSON response with exactly two keys:
 The response MUST be valid JSON only, without any markdown formatting or extra text.
 
 Webpage Text:
-{clean_text[:4000]} # Limit text length to avoid token limits for standard models
+{clean_text[:4000]}
 
 JSON Response format:
 {{
@@ -41,24 +60,20 @@ JSON Response format:
 """
 
     try:
-        # Use the ollama python client which supports format="json" 
-        # to enforce json output in newer versions
-        client = ollama.Client(host=ollama_host)
-        
-        response = client.chat(
-            model=model_name,
-            messages=[
-                {
-                    'role': 'user',
-                    'content': prompt
-                }
-            ],
-            format='json'
-        )
-        
-        result_content = response['message']['content']
+        if provider == "gemini":
+            if not gemini_api_key:
+                return {"summary": "Gemini API key missing", "category": "Config Error"}
+            result_content = process_with_gemini(prompt, gemini_api_key)
+        else: # Default to ollama
+            result_content = process_with_ollama(prompt, model_name, ollama_host)
         
         # Parse the JSON string from the response
+        # Sometimes LLMs wrap JSON in code blocks
+        if "```json" in result_content:
+            result_content = result_content.split("```json")[1].split("```")[0].strip()
+        elif "```" in result_content:
+            result_content = result_content.split("```")[1].split("```")[0].strip()
+
         try:
             data = json.loads(result_content)
             return {
@@ -70,5 +85,5 @@ JSON Response format:
             return {"summary": "Error parsing summary", "category": "Uncategorized"}
             
     except Exception as e:
-        print(f"Error calling Ollama API: {e}")
+        print(f"Error calling {provider} API: {e}")
         return {"summary": f"Error: {str(e)}", "category": "Error"}

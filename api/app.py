@@ -12,7 +12,7 @@ import asyncio
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -22,6 +22,7 @@ from bookmark_parser import parse_bookmarks_html
 from content_fetcher import fetch_and_extract_content
 from llm_processor import process_content_with_llm
 from storage import init_supabase, store_bookmark, check_url_exists
+from exporter import generate_bookmarks_html
 
 load_dotenv()
 
@@ -60,7 +61,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-async def process_bookmarks_task(task_id: str, file_path: str, model: str, host: str):
+async def process_bookmarks_task(task_id: str, file_path: str, provider: str, model: str, host: str, gemini_api_key: str = None):
     tasks_progress[task_id] = {"status": "processing", "total": 0, "processed": 0, "current_bookmark": ""}
     
     # 1. Initialize Supabase
@@ -99,7 +100,13 @@ async def process_bookmarks_task(task_id: str, file_path: str, model: str, host:
         # Fetch and process
         text_content = fetch_and_extract_content(url)
         if text_content:
-            llm_result = process_content_with_llm(text_content, model_name=model, ollama_host=host)
+            llm_result = process_content_with_llm(
+                text_content, 
+                provider=provider, 
+                model_name=model, 
+                ollama_host=host,
+                gemini_api_key=gemini_api_key
+            )
             summary = llm_result.get("summary", "")
             category = llm_result.get("category", "")
             
@@ -119,8 +126,10 @@ async def process_bookmarks_task(task_id: str, file_path: str, model: str, host:
 async def upload_bookmarks(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    provider: str = "ollama",
     model: str = "gemma3",
-    host: str = "http://localhost:11434"
+    host: str = "http://localhost:11434",
+    gemini_api_key: str = None
 ):
     task_id = str(uuid.uuid4())
     temp_dir = "temp_uploads"
@@ -130,7 +139,10 @@ async def upload_bookmarks(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    background_tasks.add_task(process_bookmarks_task, task_id, file_path, model, host)
+    # Use environment variable if key not provided in request
+    api_key = gemini_api_key or os.environ.get("GEMINI_API_KEY")
+        
+    background_tasks.add_task(process_bookmarks_task, task_id, file_path, provider, model, host, api_key)
     
     return {"task_id": task_id, "message": "Processing started"}
 
@@ -148,6 +160,26 @@ async def websocket_endpoint(websocket: WebSocket):
 async def get_status(task_id: str):
     return tasks_progress.get(task_id, {"status": "not_found"})
 
+def fetch_all_results(query):
+    """
+    Helper function to fetch all results from a Supabase query by handling pagination.
+    PostgREST typically limits results to 1000 per request.
+    """
+    all_data = []
+    page_size = 1000
+    start = 0
+    
+    while True:
+        response = query.range(start, start + page_size - 1).execute()
+        data = response.data
+        all_data.extend(data)
+        
+        if len(data) < page_size:
+            break
+        start += page_size
+        
+    return all_data
+
 @app.get("/bookmarks")
 async def get_bookmarks(q: str = None):
     supabase_url = os.environ.get("SUPABASE_URL")
@@ -157,13 +189,12 @@ async def get_bookmarks(q: str = None):
     if not supabase_client:
         return {"error": "Supabase not initialized"}
         
-    query = supabase_client.table("bookmarks").select("*")
+    query = supabase_client.table("bookmarks").select("*").order("created_at", desc=True)
     if q:
         # Simple text search on title, summary, or category
         query = query.or_(f"title.ilike.%{q}%,summary.ilike.%{q}%,category.ilike.%{q}%")
     
-    response = query.order("created_at", desc=True).execute()
-    return response.data
+    return fetch_all_results(query)
 
 @app.get("/categories")
 async def get_categories():
@@ -175,14 +206,38 @@ async def get_categories():
         return {"error": "Supabase not initialized"}
         
     # Get all categories to count them manually (Supabase aggregation is sometimes limited)
-    response = supabase_client.table("bookmarks").select("category").execute()
+    query = supabase_client.table("bookmarks").select("category")
+    data = fetch_all_results(query)
     
     categories = {}
-    for item in response.data:
+    for item in data:
         cat = item.get("category") or "Uncategorized"
         categories[cat] = categories.get(cat, 0) + 1
         
     return [{"name": name, "count": count} for name, count in categories.items()]
+
+@app.get("/export")
+async def export_bookmarks():
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase_client = init_supabase(supabase_url, supabase_key)
+    
+    if not supabase_client:
+        return {"error": "Supabase not initialized"}
+        
+    # Fetch all bookmarks
+    query = supabase_client.table("bookmarks").select("*").order("created_at", desc=True)
+    bookmarks = fetch_all_results(query)
+    
+    html_content = generate_bookmarks_html(bookmarks)
+    
+    return Response(
+        content=html_content,
+        media_type="text/html",
+        headers={
+            "Content-Disposition": "attachment; filename=bookmarks_categorized.html"
+        }
+    )
 
 if __name__ == "__main__":
     print(" - run api: python api/app.py")

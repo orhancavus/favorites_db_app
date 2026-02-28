@@ -6,6 +6,8 @@ function App() {
   const [file, setFile] = useState(null);
   const [model, setModel] = useState('gemma3');
   const [host, setHost] = useState('http://localhost:11434');
+  const [provider, setProvider] = useState('ollama'); // 'ollama' or 'gemini'
+  const [geminiKey, setGeminiKey] = useState('');
   const [status, setStatus] = useState('idle');
   const [progress, setProgress] = useState({ processed: 0, total: 0, current: '' });
 
@@ -90,8 +92,10 @@ function App() {
     setStatus('uploading');
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('provider', provider);
     formData.append('model', model);
     formData.append('host', host);
+    if (geminiKey) formData.append('gemini_api_key', geminiKey);
     try {
       const response = await fetch('http://localhost:8000/upload', { method: 'POST', body: formData });
       if (!response.ok) throw new Error('Upload failed');
@@ -131,13 +135,34 @@ function App() {
         <div className="upload-section">
           <div className="config-grid">
             <div className="input-group">
-              <label>Ollama Model</label>
-              <input type="text" value={model} onChange={(e) => setModel(e.target.value)} />
+              <label>LLM Provider</label>
+              <select value={provider} onChange={(e) => setProvider(e.target.value)}>
+                <option value="ollama">Local (Ollama)</option>
+                <option value="gemini">Cloud (Google Gemini)</option>
+              </select>
             </div>
-            <div className="input-group">
-              <label>Ollama Host</label>
-              <input type="text" value={host} onChange={(e) => setHost(e.target.value)} />
-            </div>
+            {provider === 'ollama' ? (
+              <>
+                <div className="input-group">
+                  <label>Ollama Model</label>
+                  <input type="text" value={model} onChange={(e) => setModel(e.target.value)} />
+                </div>
+                <div className="input-group">
+                  <label>Ollama Host</label>
+                  <input type="text" value={host} onChange={(e) => setHost(e.target.value)} />
+                </div>
+              </>
+            ) : (
+              <div className="input-group full-width">
+                <label>Gemini API Key</label>
+                <input
+                  type="password"
+                  value={geminiKey}
+                  onChange={(e) => setGeminiKey(e.target.value)}
+                  placeholder="Paste your Gemini API key here (or leave blank to use server-side env)"
+                />
+              </div>
+            )}
           </div>
           <div
             className="drop-zone"
@@ -197,6 +222,13 @@ function App() {
                   {cat.name} <span className="category-count">{cat.count}</span>
                 </button>
               ))}
+              <button
+                className="category-pill export-pill"
+                onClick={() => window.location.href = 'http://localhost:8000/export'}
+                title="Download categorized bookmarks as HTML"
+              >
+                📥 Export All
+              </button>
             </div>
           </div>
 

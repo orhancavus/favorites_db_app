@@ -12,6 +12,8 @@ def main():
     parser.add_argument("file_path", help="Path to the Bookmarks HTML file.")
     parser.add_argument("--model", default="gemma3", help="Name of the Ollama model to use (default: gemma3)")
     parser.add_argument("--host", default="http://localhost:11434", help="Ollama host URL (default: http://localhost:11434)")
+    parser.add_argument("--provider", default="ollama", choices=["ollama", "gemini"], help="LLM provider to use (default: ollama)")
+    parser.add_argument("--gemini-api-key", help="Google Gemini API Key (can also be set via GEMINI_API_KEY env var)")
     parser.add_argument("--dry-run", action="store_true", help="Print results instead of saving to database.")
     
     args = parser.parse_args()
@@ -52,8 +54,16 @@ def main():
             continue
             
         # 2. Process with LLM
-        print(f"  - Summarizing with model '{args.model}'...")
-        llm_result = process_content_with_llm(text_content, model_name=args.model, ollama_host=args.host)
+        print(f"  - Summarizing with {args.provider}...")
+        api_key = args.gemini_api_key or os.environ.get("GEMINI_API_KEY")
+        
+        llm_result = process_content_with_llm(
+            text_content, 
+            provider=args.provider, 
+            model_name=args.model, 
+            ollama_host=args.host,
+            gemini_api_key=api_key
+        )
         
         summary = llm_result.get("summary", "")
         category = llm_result.get("category", "")
