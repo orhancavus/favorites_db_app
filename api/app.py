@@ -214,7 +214,7 @@ async def get_bookmarks(q: str = None):
     return fetch_all_results(query)
 
 @app.get("/category-summary")
-async def get_category_summary():
+async def get_category_summary(min_count: int = 5):
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
     supabase_client = init_supabase(supabase_url, supabase_key)
@@ -222,18 +222,7 @@ async def get_category_summary():
     if not supabase_client:
         return {"error": "Supabase not initialized"}
         
-    # Supabase Python client doesn't support GROUP BY / HAVING directly easily for raw SQL
-    # so we use raw SQL or secondary aggregation if the table is small enough.
-    # Given the fetch_all_results helper, we can do it in-memory for now 
-    # to maintain consistency with get_categories, or use RPC if defined.
-    # The user provided a specific SQL query, so let's try to execute it if possible.
-    
     try:
-        # Supabase client doesn't have a direct 'execute_sql' but we can use the 
-        # rpc or postgrest directly if we want. However, many users have a simple 
-        # table and get_categories already does in-memory aggregation.
-        # Let's check get_categories and implement something similar but with the filter.
-        
         query = supabase_client.table("bookmarks").select("category")
         data = fetch_all_results(query)
         
@@ -242,9 +231,9 @@ async def get_category_summary():
             cat = item.get("category") or "Uncategorized"
             categories[cat] = categories.get(cat, 0) + 1
             
-        # Filter: count > 5
-        summary = [{"category": name, "count": count} for name, count in categories.items() if count > 5]
-        # Sort by count descending for better chart visualization
+        # Filter: count >= min_count
+        summary = [{"category": name, "count": count} for name, count in categories.items() if count >= min_count]
+        # Sort by count descending
         summary.sort(key=lambda x: x["count"], reverse=True)
         
         return summary
