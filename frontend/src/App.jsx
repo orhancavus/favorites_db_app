@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import './index.css';
 
 function App() {
@@ -10,10 +11,12 @@ function App() {
   const [geminiKey, setGeminiKey] = useState('');
   const [status, setStatus] = useState('idle');
   const [progress, setProgress] = useState({ processed: 0, total: 0, current: '' });
+  const [results, setResults] = useState({ added: 0, skipped: 0, total: 0, tokens: 0 });
 
   // Dashboard states
   const [bookmarks, setBookmarks] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [summaryData, setSummaryData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,6 +39,7 @@ function App() {
           setProgress({ processed: data.processed, total: data.total, current: data.current });
         } else if (data.type === 'complete') {
           setStatus('completed');
+          setResults({ added: data.added, skipped: data.skipped, total: data.total, tokens: data.tokens });
           // Refresh dashboard data if it was open
           if (activeTab === 'dashboard') fetchDashboardData();
         } else if (data.type === 'error') {
@@ -58,14 +62,18 @@ function App() {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      const [bRes, cRes] = await Promise.all([
+      const [bRes, cRes, sRes] = await Promise.all([
         fetch(`http://localhost:8000/bookmarks?q=${encodeURIComponent(searchQuery)}`),
-        fetch('http://localhost:8000/categories')
+        fetch('http://localhost:8000/categories'),
+        fetch('http://localhost:8000/category-summary')
       ]);
       const bData = await bRes.json();
       const cData = await cRes.json();
+      const sData = await sRes.json();
+
       setBookmarks(bData);
       setCategories(cData);
+      setSummaryData(Array.isArray(sData) ? sData : []);
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
     } finally {
@@ -90,6 +98,7 @@ function App() {
   const handleUpload = async () => {
     if (!file) return;
     setStatus('uploading');
+    setResults({ added: 0, skipped: 0, total: 0, tokens: 0 });
     const formData = new FormData();
     formData.append('file', file);
     formData.append('provider', provider);
@@ -183,19 +192,81 @@ function App() {
           <button className="upload-button" onClick={handleUpload} disabled={!file || status === 'processing'}>
             {status === 'processing' ? 'Processing...' : 'Start Analysis'}
           </button>
-          {(status === 'processing' || status === 'completed') && (
+          {status === 'processing' && (
             <div className="progress-container">
               <div className="status-info">
-                <span>{status === 'completed' ? 'Finished' : 'Processing...'}</span>
+                <span>Processing...</span>
                 <span>{progress.processed} / {progress.total}</span>
               </div>
               <div className="progress-bar-bg"><div className="progress-bar-fill" style={{ width: `${progress.total > 0 ? (progress.processed / progress.total) * 100 : 0}%` }}></div></div>
-              {status === 'processing' && <div className="current-item processing">Current: {progress.current}</div>}
+              <div className="current-item processing">Current: {progress.current}</div>
+            </div>
+          )}
+          {status === 'completed' && (
+            <div className="progress-container">
+              <div className="status-info" style={{ justifyContent: 'center', textAlign: 'center' }}>
+                <div style={{ padding: '1rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '1rem', width: '100%' }}>
+                  <h3 style={{ color: 'var(--success)', marginBottom: '0.5rem' }}>Analysis Complete!</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-around', gap: '1rem' }}>
+                    <div><strong>{results.added}</strong> <span style={{ color: 'var(--text-muted)' }}>Newly Added</span></div>
+                    <div><strong>{results.skipped}</strong> <span style={{ color: 'var(--text-muted)' }}>Skipped</span></div>
+                    <div><strong>{results.tokens.toLocaleString()}</strong> <span style={{ color: 'var(--text-muted)' }}>Tokens</span></div>
+                    <div><strong>{results.total}</strong> <span style={{ color: 'var(--text-muted)' }}>Total</span></div>
+                  </div>
+                </div>
+              </div>
+              <button className="upload-button" onClick={() => setStatus('idle')} style={{ marginTop: '1rem', background: 'rgba(255, 255, 255, 0.1)' }}>
+                Process Another File
+              </button>
             </div>
           )}
         </div>
       ) : (
         <div className="dashboard-section">
+          {summaryData.length > 0 && (
+            <div className="chart-container glass-panel">
+              <h3 className="chart-title">Category Distribution (Count {'>'} 5)</h3>
+              <div style={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={summaryData}
+                    margin={{ top: 20, right: 30, left: 0, bottom: 60 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                    <XAxis
+                      dataKey="category"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+                      interval={0}
+                      angle={-45}
+                      textAnchor="end"
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      contentStyle={{
+                        backgroundColor: '#1a1a1a',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px',
+                        color: '#fff'
+                      }}
+                    />
+                    <Bar dataKey="count" fill="#10B981" radius={[4, 4, 0, 0]}>
+                      {summaryData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill="#10B981" fillOpacity={0.8 + (index % 2) * 0.2} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
           <div className="dashboard-controls">
             <div className="search-bar">
               <span className="search-icon">🔍</span>

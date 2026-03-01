@@ -33,7 +33,10 @@ def main():
     print(f"Parsing bookmarks from {args.file_path}...")
     
     success_count = 0
+    new_links_count = 0
+    skipped_count = 0
     error_count = 0
+    total_tokens = 0
 
     for url, title in parse_bookmarks_html(args.file_path):
         print(f"\nProcessing: {title} ({url})")
@@ -41,6 +44,7 @@ def main():
         # Check if already exists
         if not args.dry_run and check_url_exists(supabase_client, url):
             print(f"  - Skipping: URL already in database.")
+            skipped_count += 1
             success_count += 1
             continue
             
@@ -64,6 +68,7 @@ def main():
             ollama_host=args.host,
             gemini_api_key=api_key
         )
+        total_tokens += llm_result.get("tokens", 0)
         
         summary = llm_result.get("summary", "")
         category = llm_result.get("category", "")
@@ -79,12 +84,17 @@ def main():
             print("  - Saving to Database...")
             if store_bookmark(supabase_client, title, url, summary, category):
                 print("  - Saved successfully.")
+                new_links_count += 1
                 success_count += 1
             else:
                 print("  - Error saving to database.")
                 error_count += 1
                 
-    print(f"\nDone! Processed {success_count} bookmarks successfully. {error_count} failed.")
+    print(f"\nDone! Processed {success_count} bookmarks.")
+    print(f"  - Newly added: {new_links_count}")
+    print(f"  - Skipped (already exists): {skipped_count}")
+    print(f"  - Failed: {error_count}")
+    print(f"  - Total Tokens Used: {total_tokens}")
 
 if __name__ == "__main__":
     main()

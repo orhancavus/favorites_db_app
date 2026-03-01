@@ -62,7 +62,15 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 async def process_bookmarks_task(task_id: str, file_path: str, provider: str, model: str, host: str, gemini_api_key: str = None):
-    tasks_progress[task_id] = {"status": "processing", "total": 0, "processed": 0, "current_bookmark": ""}
+    tasks_progress[task_id] = {
+        "status": "processing", 
+        "total": 0, 
+        "processed": 0, 
+        "newly_added": 0, 
+        "skipped": 0,
+        "total_tokens": 0,
+        "current_bookmark": ""
+    }
     
     # 1. Initialize Supabase
     supabase_url = os.environ.get("SUPABASE_URL")
@@ -95,6 +103,7 @@ async def process_bookmarks_task(task_id: str, file_path: str, provider: str, mo
 
         # Skip if already exists
         if check_url_exists(supabase_client, url):
+            tasks_progress[task_id]["skipped"] += 1
             continue
 
         # Fetch and process
@@ -109,14 +118,22 @@ async def process_bookmarks_task(task_id: str, file_path: str, provider: str, mo
             )
             summary = llm_result.get("summary", "")
             category = llm_result.get("category", "")
-            
-            store_bookmark(supabase_client, title, url, summary, category)
+            if store_bookmark(supabase_client, title, url, summary, category):
+                tasks_progress[task_id]["newly_added"] += 1
+                tasks_progress[task_id]["total_tokens"] += llm_result.get("tokens", 0)
         
         # Small delay to prevent blocking the event loop too much
         await asyncio.sleep(0.1)
 
     tasks_progress[task_id]["status"] = "completed"
-    await manager.broadcast(json.dumps({"task_id": task_id, "type": "complete"}))
+    await manager.broadcast(json.dumps({
+        "task_id": task_id, 
+        "type": "complete",
+        "added": tasks_progress[task_id]["newly_added"],
+        "skipped": tasks_progress[task_id]["skipped"],
+        "tokens": tasks_progress[task_id]["total_tokens"],
+        "total": tasks_progress[task_id]["total"]
+    }))
     
     # Cleanup file
     if os.path.exists(file_path):
@@ -195,6 +212,44 @@ async def get_bookmarks(q: str = None):
         query = query.or_(f"title.ilike.%{q}%,summary.ilike.%{q}%,category.ilike.%{q}%")
     
     return fetch_all_results(query)
+
+@app.get("/category-summary")
+async def get_category_summary():
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase_client = init_supabase(supabase_url, supabase_key)
+    
+    if not supabase_client:
+        return {"error": "Supabase not initialized"}
+        
+    # Supabase Python client doesn't support GROUP BY / HAVING directly easily for raw SQL
+    # so we use raw SQL or secondary aggregation if the table is small enough.
+    # Given the fetch_all_results helper, we can do it in-memory for now 
+    # to maintain consistency with get_categories, or use RPC if defined.
+    # The user provided a specific SQL query, so let's try to execute it if possible.
+    
+    try:
+        # Supabase client doesn't have a direct 'execute_sql' but we can use the 
+        # rpc or postgrest directly if we want. However, many users have a simple 
+        # table and get_categories already does in-memory aggregation.
+        # Let's check get_categories and implement something similar but with the filter.
+        
+        query = supabase_client.table("bookmarks").select("category")
+        data = fetch_all_results(query)
+        
+        categories = {}
+        for item in data:
+            cat = item.get("category") or "Uncategorized"
+            categories[cat] = categories.get(cat, 0) + 1
+            
+        # Filter: count > 5
+        summary = [{"category": name, "count": count} for name, count in categories.items() if count > 5]
+        # Sort by count descending for better chart visualization
+        summary.sort(key=lambda x: x["count"], reverse=True)
+        
+        return summary
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/categories")
 async def get_categories():
