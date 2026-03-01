@@ -17,7 +17,7 @@ function App() {
   const [bookmarks, setBookmarks] = useState([]);
   const [categories, setCategories] = useState([]);
   const [summaryData, setSummaryData] = useState([]);
-  const [chartMinCount, setChartMinCount] = useState(5);
+  const [chartMinCount, setChartMinCount] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isLoading, setIsLoading] = useState(false);
@@ -227,9 +227,9 @@ function App() {
           {summaryData.length > 0 && (
             <div className="chart-container glass-panel">
               <div className="chart-controls">
-                <h3 className="chart-title" style={{ margin: 0 }}>Category Distribution</h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
-                  <label htmlFor="minCount" style={{ fontSize: '0.75rem' }}>Min Bookmarks:</label>
+                <h3 className="chart-title">Category Distribution</h3>
+                <div className="chart-config-item">
+                  <label htmlFor="minCount">Min Bookmarks</label>
                   <input
                     id="minCount"
                     type="number"

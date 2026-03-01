@@ -214,7 +214,7 @@ async def get_bookmarks(q: str = None):
     return fetch_all_results(query)
 
 @app.get("/category-summary")
-async def get_category_summary(min_count: int = 5):
+async def get_category_summary(min_count: int = 10):
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
     supabase_client = init_supabase(supabase_url, supabase_key)
